@@ -265,6 +265,8 @@ input[type="color"] {
   <div class="tb-group">
     <button id="tb-import" class="tb-btn" style="font-size:11px;color:#1558d6" title="Import data from a Tableau worksheet">⬇ From Tableau</button>
     <button id="tb-clear"  class="tb-btn" style="font-size:11px;color:#c0392b" title="Clear all cell data">✕ Clear All</button>
+    <span id="tb-status" style="font-size:10px;padding:2px 7px;border-radius:10px;background:#f0f0f0;color:#888;border:1px solid #ddd" title="Tableau connection status">⏳ connecting…</span>
+    <button id="tb-retry" class="tb-btn" style="font-size:10px;color:#888;display:none" title="Retry Tableau connection">↺ retry</button>
   </div>
 </div>
 
@@ -1142,46 +1144,84 @@ document.getElementById('tb-fn-help').addEventListener('click', ()=>{
 // ════════════════════════════════════════════════════════════════════
 let tableauReady = false, tableauWorksheets = [];
 
+function setStatus(state, msg) {
+  const el = document.getElementById('tb-status');
+  const retry = document.getElementById('tb-retry');
+  const btn = document.getElementById('tb-import');
+  if (!el) return;
+  const styles = {
+    connecting: { bg:'#f0f0f0', color:'#888', border:'#ddd' },
+    ok:         { bg:'#e6f4ea', color:'#1a8a1a', border:'#b7dfbe' },
+    warn:       { bg:'#fff3e0', color:'#cc6600', border:'#ffd180' },
+    error:      { bg:'#fdecea', color:'#c0392b', border:'#f5c6c3' }
+  };
+  const s = styles[state] || styles.connecting;
+  el.style.background = s.bg; el.style.color = s.color; el.style.borderColor = s.border;
+  el.textContent = msg;
+  retry.style.display = (state === 'error') ? '' : 'none';
+  if (state === 'ok') btn.style.color = '#1a8a1a';
+  if (state === 'warn') btn.style.color = '#cc6600';
+  if (state === 'error') btn.style.color = '#c0392b';
+}
+
 async function initTableau() {
-  if (typeof tableau !== 'undefined' && tableau.extensions) {
-    try {
-      await tableau.extensions.initializeAsync();
-      tableauReady = true;
-
-      // Collect worksheets from all dashboard objects (handles nested layout containers)
-      const dashboard = tableau.extensions.dashboardContent.dashboard;
-      const wsMap = new Map();
-      // Primary: direct worksheets array
-      (dashboard.worksheets || []).forEach(ws => wsMap.set(ws.name, ws));
-      // Secondary: walk dashboard objects for any sheets missed above
-      try {
-        (dashboard.objects || []).forEach(obj => {
-          if (obj.worksheet) wsMap.set(obj.worksheet.name, obj.worksheet);
-        });
-      } catch(_) {}
-      tableauWorksheets = [...wsMap.values()];
-
-      console.log('[Spreadsheet] ✅ Tableau initialised —', tableauWorksheets.length, 'worksheets found:', tableauWorksheets.map(w=>w.name));
-
-      // Show a subtle status on the import button so user knows it's ready
-      const btn = document.getElementById('tb-import');
-      if (tableauWorksheets.length > 0) {
-        btn.title = `${tableauWorksheets.length} worksheet(s) available`;
-        btn.style.color = '#1a8a1a';
-      } else {
-        btn.title = 'No worksheets found on this dashboard';
-        btn.style.color = '#cc6600';
-        console.warn('[Spreadsheet] No worksheets found — make sure sheets are added to the dashboard, not just the workbook.');
-      }
-    } catch(err) {
-      console.error('[Spreadsheet] Tableau init failed:', err.message, err);
+  if (typeof tableau === 'undefined' || !tableau.extensions) {
+    setStatus('error', '❌ no tableau API');
+    console.warn('[Spreadsheet] tableau global not found — not running inside Tableau.');
+    return;
+  }
+  setStatus('connecting', '⏳ connecting…');
+  try {
+    await tableau.extensions.initializeAsync();
+  } catch(err) {
+    // "already initialized" is fine — Tableau throws this on reload within same session
+    if (!/already.?init/i.test(err.message)) {
+      setStatus('error', '❌ init failed: ' + err.message);
+      console.error('[Spreadsheet] initializeAsync failed:', err);
+      return;
     }
+    console.log('[Spreadsheet] Already initialized — continuing.');
+  }
+
+  tableauReady = true;
+
+  // Collect worksheets — walk both .worksheets and .objects to catch nested containers
+  try {
+    const dashboard = tableau.extensions.dashboardContent.dashboard;
+    const wsMap = new Map();
+    (dashboard.worksheets || []).forEach(ws => wsMap.set(ws.name, ws));
+    try {
+      (dashboard.objects || []).forEach(obj => {
+        if (obj.worksheet) wsMap.set(obj.worksheet.name, obj.worksheet);
+      });
+    } catch(_) {}
+    tableauWorksheets = [...wsMap.values()];
+  } catch(err) {
+    setStatus('error', '❌ dashboard error: ' + err.message);
+    console.error('[Spreadsheet] dashboard access failed:', err);
+    return;
+  }
+
+  if (tableauWorksheets.length > 0) {
+    setStatus('ok', '✅ ' + tableauWorksheets.length + ' sheet' + (tableauWorksheets.length > 1 ? 's' : '') + ' ready');
+    console.log('[Spreadsheet] ✅ Tableau ready —', tableauWorksheets.length, 'worksheets:', tableauWorksheets.map(w=>w.name));
+  } else {
+    setStatus('warn', '⚠ no sheets on dashboard');
+    console.warn('[Spreadsheet] Connected but no worksheets found. Drag a Sheet onto the dashboard.');
   }
 }
 
+document.getElementById('tb-retry').addEventListener('click', () => {
+  tableauReady = false; tableauWorksheets = [];
+  setStatus('connecting', '⏳ retrying…');
+  initTableau();
+});
+
 document.getElementById('tb-import').addEventListener('click', ()=>{
   if (!tableauReady) {
-    alert('Not running inside Tableau.\nOpen this file as a Dashboard Extension in Tableau Desktop or Server.\nSee SETUP.md for instructions.');
+    const status = document.getElementById('tb-status');
+    const statusMsg = status ? status.textContent : 'not connected';
+    alert('Tableau not connected yet.\n\nStatus: ' + statusMsg + '\n\nIf you are inside Tableau Desktop:\n• Click the ↺ retry button next to the status badge\n• Or right-click the extension → Reload\n\nIf you see this outside Tableau, load the .trex file as a Dashboard Extension.');
     return;
   }
   const ws = document.getElementById('ws-select');
