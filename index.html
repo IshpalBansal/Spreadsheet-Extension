@@ -312,9 +312,32 @@ input[type="color"] {
   <div class="st-item" style="margin-left:auto;color:#aaa;font-size:10px">Spreadsheet Extension v1.0</div>
 </div>
 
-<!-- Tableau Extensions API (silently skipped when not in Tableau) -->
-<script src="https://extensions.tableausoftware.com/lib/tableau.extensions.1.latest.js"
-        onerror="console.log('[Spreadsheet] Running in standalone mode')"></script>
+<!-- Tableau Extensions API — loaded from local copy in the same repo -->
+<!-- Download from: https://tableau.github.io/extensions-api/lib/tableau.extensions.1.latest.js -->
+<!-- and place tableau.extensions.1.latest.js in the same folder as this file               -->
+<script>
+(function() {
+  // Try local copy first (works when file is in the same GitHub Pages repo)
+  // Falls back to the official GitHub-hosted version
+  var sources = [
+    'tableau.extensions.1.latest.js',
+    'https://tableau.github.io/extensions-api/lib/tableau.extensions.1.latest.js'
+  ];
+  var idx = 0;
+  function tryNext() {
+    if (idx >= sources.length) {
+      console.warn('[Spreadsheet] All Tableau API sources failed. Status will show no API.');
+      return;
+    }
+    var s = document.createElement('script');
+    s.src = sources[idx++];
+    s.onload = function() { console.log('[Spreadsheet] Tableau API loaded from:', s.src); };
+    s.onerror = function() { console.warn('[Spreadsheet] Failed to load from:', s.src); tryNext(); };
+    document.head.appendChild(s);
+  }
+  tryNext();
+})();
+</script>
 
 <script>
 'use strict';
@@ -1165,9 +1188,15 @@ function setStatus(state, msg) {
 }
 
 async function initTableau() {
+  // The API script is loaded dynamically — wait up to 5s for it to appear
+  let waited = 0;
+  while ((typeof tableau === 'undefined' || !tableau.extensions) && waited < 5000) {
+    await new Promise(r => setTimeout(r, 200));
+    waited += 200;
+  }
   if (typeof tableau === 'undefined' || !tableau.extensions) {
     setStatus('error', '❌ no tableau API');
-    console.warn('[Spreadsheet] tableau global not found — not running inside Tableau.');
+    console.warn('[Spreadsheet] tableau not found after 5s. Make sure tableau.extensions.1.latest.js is in your GitHub repo.');
     return;
   }
   setStatus('connecting', '⏳ connecting…');
