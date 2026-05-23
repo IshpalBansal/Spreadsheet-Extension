@@ -1,0 +1,1208 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Spreadsheet — Tableau Extension</title>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  font-family: 'Calibri', 'Segoe UI', sans-serif;
+  font-size: 13px;
+  background: #f3f3f3;
+  color: #1f1f1f;
+  overflow: hidden;
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+/* ── Toolbar ── */
+#toolbar {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 4px 8px;
+  background: #fff;
+  border-bottom: 1px solid #d0d0d0;
+  flex-wrap: wrap;
+  flex-shrink: 0;
+}
+.tb-group {
+  display: flex;
+  align-items: center;
+  gap: 1px;
+  padding: 0 6px;
+  border-right: 1px solid #e8e8e8;
+}
+.tb-btn {
+  padding: 3px 8px;
+  border: 1px solid transparent;
+  border-radius: 3px;
+  cursor: pointer;
+  background: transparent;
+  color: #3c3c3c;
+  font-family: inherit;
+  font-size: 13px;
+  line-height: 1.4;
+  transition: background 0.1s, border-color 0.1s;
+}
+.tb-btn:hover { background: #ebebeb; border-color: #c8c8c8; }
+.tb-btn.active { background: #d4e3fc; color: #1558d6; border-color: #a8c7fa; }
+select.tb-btn {
+  appearance: none; -webkit-appearance: none;
+  padding-right: 18px;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='5'%3E%3Cpath d='M0 0l5 5 5-5z' fill='%23777'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 4px center;
+}
+input[type="color"] {
+  width: 24px; height: 22px;
+  border: 1px solid #ccc; border-radius: 3px;
+  cursor: pointer; padding: 1px; vertical-align: middle;
+}
+
+/* ── Function helper ── */
+#fn-helper {
+  display: none;
+  background: #fffbf0;
+  border-bottom: 1px solid #e0d080;
+  padding: 5px 10px;
+  flex-wrap: wrap;
+  gap: 4px;
+  flex-shrink: 0;
+  align-items: center;
+}
+#fn-helper.visible { display: flex; }
+.fn-chip {
+  font-size: 11px; padding: 2px 8px;
+  border: 1px solid #d0b060; border-radius: 3px;
+  background: #fff8e1; color: #5c4000;
+  cursor: pointer;
+}
+.fn-chip:hover { background: #ffecb3; }
+
+/* ── Import panel ── */
+#import-panel {
+  display: none;
+  background: #e8f4fd;
+  border-bottom: 1px solid #b3d7f5;
+  padding: 6px 12px;
+  flex-shrink: 0;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+}
+#import-panel.visible { display: flex; }
+
+/* ── Formula bar ── */
+#formula-bar {
+  display: flex;
+  align-items: center;
+  background: #fff;
+  border-bottom: 1px solid #d0d0d0;
+  height: 27px;
+  flex-shrink: 0;
+}
+#cell-ref-box {
+  width: 72px; min-width: 72px;
+  padding: 0 8px;
+  border-right: 1px solid #d0d0d0;
+  font-weight: 600; font-size: 12px; color: #1558d6;
+  display: flex; align-items: center; height: 100%;
+}
+#fx-label {
+  padding: 0 10px;
+  color: #666; font-style: italic; font-weight: 700; font-size: 13px;
+  border-right: 1px solid #d0d0d0;
+  display: flex; align-items: center; height: 100%;
+  flex-shrink: 0;
+}
+#formula-input {
+  flex: 1; border: none; outline: none;
+  padding: 0 8px; font-size: 13px;
+  font-family: 'Calibri', 'Segoe UI', sans-serif;
+  background: transparent; height: 100%;
+}
+#formula-input:focus { background: #fff; }
+
+/* ── Grid ── */
+#grid-container { flex: 1; overflow: auto; position: relative; }
+#grid-wrapper { position: relative; display: inline-block; min-width: 100%; }
+#grid { border-collapse: collapse; table-layout: fixed; }
+#grid th, #grid td {
+  border-right: 1px solid #d0d0d0;
+  border-bottom: 1px solid #d0d0d0;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+
+/* Corner */
+.corner {
+  width: 46px; min-width: 46px;
+  background: #f8f9fa;
+  position: sticky; left: 0; top: 0; z-index: 5;
+  border-right: 1px solid #c0c0c0 !important;
+  border-bottom: 1px solid #c0c0c0 !important;
+}
+
+/* Column headers */
+.col-hdr {
+  background: #f8f9fa;
+  text-align: center;
+  font-size: 12px; font-weight: 400; color: #444;
+  height: 22px;
+  position: sticky; top: 0; z-index: 3;
+  cursor: pointer; user-select: none;
+}
+.col-hdr:hover { background: #e8f0fe; color: #1558d6; }
+.col-hdr.sel { background: #d4e3fc; color: #1558d6; font-weight: 600; }
+
+/* Row headers */
+.row-hdr {
+  background: #f8f9fa;
+  text-align: center;
+  font-size: 11px; color: #555;
+  width: 46px; min-width: 46px;
+  position: sticky; left: 0; z-index: 2;
+  cursor: pointer; user-select: none;
+  border-right: 1px solid #c0c0c0 !important;
+}
+.row-hdr:hover { background: #e8f0fe; }
+.row-hdr.sel { background: #d4e3fc; color: #1558d6; font-weight: 600; }
+
+/* Data cells */
+.cell {
+  height: 24px; padding: 0 4px;
+  vertical-align: middle;
+  cursor: default;
+  font-size: 13px;
+  background: #fff;
+}
+.cell.in-range { background: #e8f0fe !important; }
+.cell.selected {
+  outline: 2px solid #1a73e8;
+  outline-offset: -2px;
+  background: #fff !important;
+  position: relative; z-index: 1;
+}
+.cell.error-val { color: #cc0000 !important; }
+
+/* Resize handle */
+.col-resize {
+  position: absolute; right: 0; top: 0; bottom: 0;
+  width: 5px; cursor: col-resize; z-index: 4;
+}
+
+/* Floating cell editor */
+#cell-editor {
+  position: absolute;
+  border: 2px solid #1a73e8;
+  outline: none;
+  padding: 0 3px;
+  font-family: 'Calibri', 'Segoe UI', sans-serif;
+  font-size: 13px;
+  background: #fff;
+  z-index: 20;
+  display: none;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.18);
+}
+
+/* ── Status bar ── */
+#status-bar {
+  background: #f0f0f0;
+  border-top: 1px solid #d0d0d0;
+  padding: 2px 12px;
+  display: flex; gap: 18px;
+  font-size: 11px; color: #555;
+  flex-shrink: 0; align-items: center;
+  min-height: 22px;
+}
+.st-item { display: flex; gap: 4px; align-items: center; }
+.st-val { font-weight: 600; color: #222; }
+</style>
+</head>
+<body>
+
+<!-- ════════════ TOOLBAR ════════════ -->
+<div id="toolbar">
+  <div class="tb-group">
+    <select id="tb-font-family" class="tb-btn" style="width:108px" title="Font family">
+      <option>Calibri</option><option>Arial</option><option>Verdana</option>
+      <option>Times New Roman</option><option>Courier New</option><option>Georgia</option>
+    </select>
+    <select id="tb-font-size" class="tb-btn" style="width:50px" title="Font size">
+      <option>8</option><option>9</option><option>10</option><option>11</option>
+      <option selected>13</option><option>14</option><option>16</option>
+      <option>18</option><option>20</option><option>24</option><option>28</option><option>36</option>
+    </select>
+  </div>
+  <div class="tb-group">
+    <button id="tb-bold"      class="tb-btn" style="font-weight:bold;width:28px" title="Bold (Ctrl+B)">B</button>
+    <button id="tb-italic"    class="tb-btn" style="font-style:italic;width:28px" title="Italic (Ctrl+I)">I</button>
+    <button id="tb-underline" class="tb-btn" style="text-decoration:underline;width:28px" title="Underline (Ctrl+U)">U</button>
+  </div>
+  <div class="tb-group">
+    <button id="tb-al" class="tb-btn" title="Align Left"   style="font-size:14px;width:28px">⬡</button>
+    <button id="tb-ac" class="tb-btn" title="Align Center" style="font-size:14px;width:28px">⊟</button>
+    <button id="tb-ar" class="tb-btn" title="Align Right"  style="font-size:14px;width:28px">⬢</button>
+  </div>
+  <div class="tb-group" style="gap:5px">
+    <span style="font-size:11px;color:#888">A</span>
+    <input type="color" id="tb-fcolor" value="#1f1f1f" title="Font colour">
+    <span style="font-size:11px;color:#888;margin-left:4px">Fill</span>
+    <input type="color" id="tb-bgcolor" value="#ffffff" title="Cell fill colour">
+  </div>
+  <div class="tb-group">
+    <button id="fmt-dollar"  class="tb-btn" title="Currency ($)">$</button>
+    <button id="fmt-percent" class="tb-btn" title="Percent (%)">%</button>
+    <button id="fmt-comma"   class="tb-btn" title="Comma (1,234)">,</button>
+    <button id="fmt-dec2"    class="tb-btn" title="2 Decimal places">.00</button>
+    <button id="fmt-int"     class="tb-btn" title="Integer (no decimals)">0</button>
+  </div>
+  <div class="tb-group">
+    <button id="tb-fn-help" class="tb-btn" title="Toggle formula reference panel" style="font-size:11px">ƒx Help</button>
+  </div>
+  <div class="tb-group">
+    <button id="tb-import" class="tb-btn" style="font-size:11px;color:#1558d6" title="Import data from a Tableau worksheet">⬇ From Tableau</button>
+    <button id="tb-clear"  class="tb-btn" style="font-size:11px;color:#c0392b" title="Clear all cell data">✕ Clear All</button>
+  </div>
+</div>
+
+<!-- ════════════ FORMULA HELPER ════════════ -->
+<div id="fn-helper">
+  <span style="font-size:11px;font-weight:600;color:#8b6914;margin-right:6px">Quick insert:</span>
+  <!-- chips injected by JS -->
+</div>
+
+<!-- ════════════ TABLEAU IMPORT PANEL ════════════ -->
+<div id="import-panel">
+  <span>📊 Sheet:</span>
+  <select id="ws-select" class="tb-btn"></select>
+  <button id="btn-do-import"     class="tb-btn" style="color:#1558d6">Import</button>
+  <button id="btn-cancel-import" class="tb-btn" style="color:#666">Cancel</button>
+  <span id="import-msg" style="color:#555;font-style:italic"></span>
+</div>
+
+<!-- ════════════ FORMULA BAR ════════════ -->
+<div id="formula-bar">
+  <div id="cell-ref-box">A1</div>
+  <div id="fx-label">fx</div>
+  <input id="formula-input" spellcheck="false" autocomplete="off"
+         placeholder="Type a value or a formula starting with  =">
+</div>
+
+<!-- ════════════ GRID ════════════ -->
+<div id="grid-container">
+  <div id="grid-wrapper">
+    <table id="grid"></table>
+    <input id="cell-editor" spellcheck="false" autocomplete="off">
+  </div>
+</div>
+
+<!-- ════════════ STATUS BAR ════════════ -->
+<div id="status-bar">
+  <div class="st-item">📍 <span id="st-ref" class="st-val">A1</span></div>
+  <div class="st-item" id="st-sum-w" style="display:none">∑ <span id="st-sum" class="st-val"></span></div>
+  <div class="st-item" id="st-avg-w" style="display:none">x̄ <span id="st-avg" class="st-val"></span></div>
+  <div class="st-item" id="st-cnt-w" style="display:none">Count: <span id="st-cnt" class="st-val"></span></div>
+  <div class="st-item" id="st-min-w" style="display:none">Min: <span id="st-min" class="st-val"></span></div>
+  <div class="st-item" id="st-max-w" style="display:none">Max: <span id="st-max" class="st-val"></span></div>
+  <div class="st-item" style="margin-left:auto;color:#aaa;font-size:10px">Spreadsheet Extension v1.0</div>
+</div>
+
+<!-- Tableau Extensions API (silently skipped when not in Tableau) -->
+<script src="https://extensions.tableausoftware.com/lib/tableau.extensions.1.latest.js"
+        onerror="console.log('[Spreadsheet] Running in standalone mode')"></script>
+
+<script>
+'use strict';
+// ════════════════════════════════════════════════════════════════════
+//  CONSTANTS
+// ════════════════════════════════════════════════════════════════════
+const COLS = 20, ROWS = 60, DEFAULT_COL_W = 96, ROW_H = 24;
+
+// ════════════════════════════════════════════════════════════════════
+//  CELL REFERENCE UTILITIES
+// ════════════════════════════════════════════════════════════════════
+function numToCol(n) {
+  let s = '', x = n + 1;
+  while (x > 0) { x--; s = String.fromCharCode(65 + (x % 26)) + s; x = Math.floor(x / 26); }
+  return s;
+}
+function colToNum(s) {
+  let n = 0;
+  for (const ch of s.toUpperCase()) n = n * 26 + ch.charCodeAt(0) - 64;
+  return n - 1;
+}
+function parseRef(ref) {
+  const m = String(ref).toUpperCase().match(/^\$?([A-Z]+)\$?(\d+)$/);
+  return m ? [parseInt(m[2]) - 1, colToNum(m[1])] : null;
+}
+function cellLabel(r, c) { return numToCol(c) + (r + 1); }
+function expandRange(rng) {
+  const parts = rng.toUpperCase().split(':');
+  if (parts.length === 1) { const rc = parseRef(parts[0]); return rc ? [rc] : []; }
+  const s = parseRef(parts[0]), e = parseRef(parts[1]);
+  if (!s || !e) return [];
+  const out = [];
+  for (let r = Math.min(s[0],e[0]); r <= Math.max(s[0],e[0]); r++)
+    for (let c = Math.min(s[1],e[1]); c <= Math.max(s[1],e[1]); c++)
+      out.push([r, c]);
+  return out;
+}
+
+// ════════════════════════════════════════════════════════════════════
+//  TOKENIZER
+// ════════════════════════════════════════════════════════════════════
+function tokenize(expr) {
+  const T = [];
+  let i = 0;
+  while (i < expr.length) {
+    const ch = expr[i];
+    if (/\s/.test(ch)) { i++; continue; }
+    if (ch === '"') {
+      let s = ''; let j = i + 1;
+      while (j < expr.length && expr[j] !== '"') s += expr[j++];
+      T.push({ t: 'str', v: s }); i = j + 1; continue;
+    }
+    if (/[0-9.]/.test(ch)) {
+      let s = '';
+      while (i < expr.length && /[0-9.]/.test(expr[i])) s += expr[i++];
+      T.push({ t: 'num', v: parseFloat(s) }); continue;
+    }
+    if (ch === '<' || ch === '>') {
+      const two = expr.slice(i, i + 2);
+      if (two === '<=' || two === '>=' || two === '<>') { T.push({ t: 'op', v: two }); i += 2; }
+      else { T.push({ t: 'op', v: ch }); i++; }
+      continue;
+    }
+    if (/[+\-*\/%^(),&=]/.test(ch)) { T.push({ t: 'op', v: ch }); i++; continue; }
+    let s = '';
+    while (i < expr.length && /[A-Za-z_$0-9]/.test(expr[i])) s += expr[i++];
+    if (s) T.push({ t: 'id', v: s });
+    else i++;
+  }
+  return T;
+}
+
+// ════════════════════════════════════════════════════════════════════
+//  RECURSIVE DESCENT PARSER
+// ════════════════════════════════════════════════════════════════════
+function parseExpr(T, p, gv) { return parseCmp(T, p, gv); }
+
+function parseCmp(T, p, gv) {
+  let [l, p2] = parseCat(T, p, gv);
+  while (p2 < T.length && T[p2]?.t === 'op' && ['=','<>','<','>','<=','>='].includes(T[p2].v)) {
+    const op = T[p2++].v;
+    const [r, np] = parseCat(T, p2, gv); p2 = np;
+    if      (op==='=')  l = l == r;
+    else if (op==='<>') l = l != r;
+    else if (op==='<')  l = Number(l) <  Number(r);
+    else if (op==='>')  l = Number(l) >  Number(r);
+    else if (op==='<=') l = Number(l) <= Number(r);
+    else if (op==='>=') l = Number(l) >= Number(r);
+  }
+  return [l, p2];
+}
+function parseCat(T, p, gv) {
+  let [l, p2] = parseAdd(T, p, gv);
+  while (p2 < T.length && T[p2]?.v === '&') {
+    p2++;
+    const [r, np] = parseAdd(T, p2, gv); p2 = np;
+    l = String(l ?? '') + String(r ?? '');
+  }
+  return [l, p2];
+}
+function parseAdd(T, p, gv) {
+  let [l, p2] = parseMul(T, p, gv);
+  while (p2 < T.length && T[p2]?.t === 'op' && (T[p2].v==='+' || T[p2].v==='-')) {
+    const op = T[p2++].v;
+    const [r, np] = parseMul(T, p2, gv); p2 = np;
+    l = op==='+' ? +l + +r : +l - +r;
+  }
+  return [l, p2];
+}
+function parseMul(T, p, gv) {
+  let [l, p2] = parsePow(T, p, gv);
+  while (p2 < T.length && T[p2]?.t === 'op' && (T[p2].v==='*' || T[p2].v==='/' || T[p2].v==='%')) {
+    const op = T[p2++].v;
+    const [r, np] = parsePow(T, p2, gv); p2 = np;
+    l = op==='*' ? l*r : op==='/' ? l/r : l%r;
+  }
+  return [l, p2];
+}
+function parsePow(T, p, gv) {
+  let [l, p2] = parseUnary(T, p, gv);
+  if (p2 < T.length && T[p2]?.v === '^') {
+    const [r, np] = parseUnary(T, p2+1, gv); p2 = np;
+    l = Math.pow(l, r);
+  }
+  return [l, p2];
+}
+function parseUnary(T, p, gv) {
+  if (p < T.length && T[p]?.v === '-') { const [v,np] = parsePrimary(T,p+1,gv); return [-v, np]; }
+  if (p < T.length && T[p]?.v === '+') return parsePrimary(T, p+1, gv);
+  return parsePrimary(T, p, gv);
+}
+function parsePrimary(T, p, gv) {
+  if (p >= T.length) return [0, p];
+  const tok = T[p];
+  if (tok.t === 'num') return [tok.v, p+1];
+  if (tok.t === 'str') return [tok.v, p+1];
+  if (tok.t === 'op' && tok.v === '(') {
+    const [v, np] = parseExpr(T, p+1, gv);
+    return [v, T[np]?.v === ')' ? np+1 : np];
+  }
+  if (tok.t === 'id') {
+    const up = tok.v.toUpperCase();
+    if (up === 'TRUE')  return [true,     p+1];
+    if (up === 'FALSE') return [false,    p+1];
+    if (up === 'PI')    return [Math.PI,  p+1];
+    // Function call
+    if (p+1 < T.length && T[p+1]?.v === '(') {
+      const [args, np] = parseArgList(T, p+2, gv);
+      return [callFn(up, args, gv), np];
+    }
+    // Cell reference
+    const m = up.match(/^([A-Z]+)(\d+)$/);
+    if (m) {
+      const v = gv(parseInt(m[2])-1, colToNum(m[1]));
+      const n = parseFloat(v);
+      return [(!isNaN(n) && v !== '') ? n : (v ?? ''), p+1];
+    }
+  }
+  return [0, p+1];
+}
+function parseArgList(T, p, gv) {
+  const args = [];
+  if (p < T.length && T[p]?.v === ')') return [args, p+1];
+  while (p < T.length) {
+    const [v, np] = parseExpr(T, p, gv);
+    args.push(v); p = np;
+    if (p >= T.length || T[p]?.v === ')') { p++; break; }
+    if (T[p]?.v === ',') p++;
+  }
+  return [args, p];
+}
+
+// ════════════════════════════════════════════════════════════════════
+//  BUILT-IN FUNCTIONS
+// ════════════════════════════════════════════════════════════════════
+function callFn(name, args, gv) {
+  const n   = v => { const x = parseFloat(v); return isNaN(x) ? 0 : x; };
+  const nums = a => a.map(n);
+  switch (name) {
+    // ── Math / stats ──
+    case 'SUM':       return args.reduce((s,v) => s + n(v), 0);
+    case 'AVERAGE': case 'AVG': {
+      const ns = args.filter(v => v!=='' && !isNaN(parseFloat(v))).map(n);
+      return ns.length ? ns.reduce((a,b)=>a+b,0)/ns.length : 0;
+    }
+    case 'MAX':       return args.length ? Math.max(...nums(args)) : 0;
+    case 'MIN':       return args.length ? Math.min(...nums(args)) : 0;
+    case 'COUNT':     return args.filter(v => v!=='' && !isNaN(parseFloat(v))).length;
+    case 'COUNTA':    return args.filter(v => v!=='' && v!=null).length;
+    case 'COUNTBLANK':return args.filter(v => v==='' || v==null).length;
+    case 'PRODUCT':   return args.reduce((p,v) => p * n(v), 1);
+    case 'SUMPRODUCT':{
+      // assumes two equal-length arrays already flattened — basic version
+      const half = Math.floor(args.length/2);
+      let s=0; for(let i=0;i<half;i++) s+=n(args[i])*n(args[i+half]); return s;
+    }
+    case 'ABS':       return Math.abs(n(args[0]));
+    case 'SQRT':      return Math.sqrt(n(args[0]));
+    case 'POWER':     return Math.pow(n(args[0]), n(args[1]));
+    case 'MOD':       return n(args[0]) % n(args[1]);
+    case 'INT':       return Math.floor(n(args[0]));
+    case 'ROUND':     { const f=Math.pow(10,n(args[1])); return Math.round(n(args[0])*f)/f; }
+    case 'ROUNDUP':   { const f=Math.pow(10,n(args[1])); return Math.ceil(n(args[0])*f)/f; }
+    case 'ROUNDDOWN': { const f=Math.pow(10,n(args[1])); return Math.floor(n(args[0])*f)/f; }
+    case 'CEILING':   return Math.ceil(n(args[0]) / n(args[1])) * n(args[1]);
+    case 'FLOOR':     return Math.floor(n(args[0]) / n(args[1])) * n(args[1]);
+    case 'SIGN':      return Math.sign(n(args[0]));
+    case 'EXP':       return Math.exp(n(args[0]));
+    case 'LN':        return Math.log(n(args[0]));
+    case 'LOG': case 'LOG10': return Math.log10(n(args[0]));
+    case 'LOG2':      return Math.log2(n(args[0]));
+    case 'SIN':       return Math.sin(n(args[0]));
+    case 'COS':       return Math.cos(n(args[0]));
+    case 'TAN':       return Math.tan(n(args[0]));
+    case 'ASIN':      return Math.asin(n(args[0]));
+    case 'ACOS':      return Math.acos(n(args[0]));
+    case 'ATAN':      return Math.atan(n(args[0]));
+    case 'ATAN2':     return Math.atan2(n(args[0]), n(args[1]));
+    case 'DEGREES':   return n(args[0]) * 180 / Math.PI;
+    case 'RADIANS':   return n(args[0]) * Math.PI / 180;
+    case 'FACT':      { let f=1; for(let i=2;i<=n(args[0]);i++) f*=i; return f; }
+    case 'GCD': {
+      let a=Math.abs(n(args[0])),b=Math.abs(n(args[1]));
+      while(b){[a,b]=[b,a%b];} return a;
+    }
+    case 'LCM': {
+      const a=Math.abs(n(args[0])),b=Math.abs(n(args[1]));
+      let x=a,y=b; while(y){[x,y]=[y,x%y];} return a&&b ? a*b/x : 0;
+    }
+    case 'RAND':      return Math.random();
+    case 'RANDBETWEEN': return Math.floor(Math.random()*(n(args[1])-n(args[0])+1))+n(args[0]);
+    case 'PI':        return Math.PI;
+    case 'EVEN':      { const x=n(args[0]); return x>=0?Math.ceil(x/2)*2:Math.floor(x/2)*2; }
+    case 'ODD':       { const x=n(args[0]); const r=Math.ceil(Math.abs(x)/2)*2-1; return x<0?-r:r; }
+
+    // ── Logic ──
+    case 'IF':        return args[0] ? (args[1]??'') : (args[2]??'');
+    case 'IFS': {
+      for(let i=0;i<args.length-1;i+=2) if(args[i]) return args[i+1]??'';
+      return '';
+    }
+    case 'AND':       return args.every(Boolean);
+    case 'OR':        return args.some(Boolean);
+    case 'NOT':       return !args[0];
+    case 'XOR':       return args.reduce((a,b)=>a^!!b, false);
+    case 'IFERROR':   return (String(args[0]).startsWith('#')) ? (args[1]??'') : args[0];
+    case 'IFNA':      return (args[0]==='#N/A') ? (args[1]??'') : args[0];
+    case 'SWITCH': {
+      const val=args[0];
+      for(let i=1;i<args.length-1;i+=2) if(args[i]==val) return args[i+1];
+      return args.length%2===0 ? args[args.length-1] : '#N/A';
+    }
+
+    // ── Text ──
+    case 'LEN':           return String(args[0]??'').length;
+    case 'UPPER':         return String(args[0]??'').toUpperCase();
+    case 'LOWER':         return String(args[0]??'').toLowerCase();
+    case 'PROPER': {
+      return String(args[0]??'').replace(/\b\w/g,c=>c.toUpperCase());
+    }
+    case 'TRIM':          return String(args[0]??'').trim();
+    case 'LEFT':          return String(args[0]??'').slice(0, n(args[1]));
+    case 'RIGHT': {
+      const s=String(args[0]??''); return s.slice(s.length - n(args[1]));
+    }
+    case 'MID':           return String(args[0]??'').slice(n(args[1])-1, n(args[1])-1+n(args[2]));
+    case 'FIND': {
+      const idx=String(args[1]??'').indexOf(String(args[0]??''));
+      return idx===-1 ? '#VALUE!' : idx+1;
+    }
+    case 'SEARCH': {
+      const idx=String(args[1]??'').toLowerCase().indexOf(String(args[0]??'').toLowerCase());
+      return idx===-1 ? '#VALUE!' : idx+1;
+    }
+    case 'SUBSTITUTE': {
+      const s=String(args[0]??''),f=String(args[1]??''),r=String(args[2]??'');
+      return args[3]!=null ? s.split(f).reduce((a,p,i)=>i===n(args[3])-1?a+r+p:a+(i?f:'')+p,'') : s.split(f).join(r);
+    }
+    case 'REPLACE': {
+      const s=String(args[0]??'');
+      return s.slice(0,n(args[1])-1) + String(args[3]??'') + s.slice(n(args[1])-1+n(args[2]));
+    }
+    case 'REPT':          return String(args[0]??'').repeat(n(args[1]));
+    case 'CONCATENATE': case 'CONCAT': return args.map(v=>String(v??'')).join('');
+    case 'TEXTJOIN':      return args.slice(2).map(v=>String(v??'')).filter((v,_,a)=>args[1]?v!=='':true).join(String(args[0]??''));
+    case 'TEXT':          return String(args[0]??'');
+    case 'VALUE':         return parseFloat(args[0]) || 0;
+    case 'CHAR':          return String.fromCharCode(n(args[0]));
+    case 'CODE':          return String(args[0]??'').charCodeAt(0)||0;
+    case 'NUMBERVALUE':   return parseFloat(String(args[0]).replace(',','.')) || 0;
+
+    // ── Info ──
+    case 'ISNUMBER':  return !isNaN(parseFloat(args[0])) && args[0]!=='';
+    case 'ISTEXT':    return typeof args[0]==='string' && isNaN(parseFloat(args[0]));
+    case 'ISBLANK':   return args[0]==='' || args[0]==null;
+    case 'ISERROR':   return typeof args[0]==='string' && args[0].startsWith('#');
+    case 'ISEVEN':    return n(args[0])%2===0;
+    case 'ISODD':     return n(args[0])%2!==0;
+    case 'TYPE': {
+      if(typeof args[0]==='number') return 1;
+      if(typeof args[0]==='string') return 2;
+      if(typeof args[0]==='boolean') return 4;
+      return 16;
+    }
+
+    // ── Date / Time ──
+    case 'TODAY':  return new Date().toLocaleDateString();
+    case 'NOW':    return new Date().toLocaleString();
+    case 'YEAR':   return new Date(args[0]).getFullYear();
+    case 'MONTH':  return new Date(args[0]).getMonth()+1;
+    case 'DAY':    return new Date(args[0]).getDate();
+    case 'HOUR':   return new Date(args[0]).getHours();
+    case 'MINUTE': return new Date(args[0]).getMinutes();
+    case 'SECOND': return new Date(args[0]).getSeconds();
+    case 'WEEKDAY':return new Date(args[0]).getDay()+1;
+
+    default: return `#NAME?(${name})`;
+  }
+}
+
+// ════════════════════════════════════════════════════════════════════
+//  FORMULA EVALUATOR — main entry point
+// ════════════════════════════════════════════════════════════════════
+function expandRangeRefs(expr, gv) {
+  // Replace A1:B3 → individual cell value tokens before tokenizing
+  return expr.replace(/([A-Z]+\d+):([A-Z]+\d+)/gi, (_, s, e) =>
+    expandRange(`${s}:${e}`).map(([r,c]) => {
+      const v = gv(r, c);
+      return (typeof v==='string' && isNaN(parseFloat(v)) && v!=='') ? `"${v}"` : (v==='' ? '0' : String(v));
+    }).join(',')
+  );
+}
+
+function evaluate(raw, getData, visited) {
+  visited = visited || new Set();
+  if (typeof raw !== 'string') return raw ?? '';
+  const trimmed = raw.trim();
+  if (trimmed === '') return '';
+  if (!trimmed.startsWith('=')) {
+    const n = Number(trimmed);
+    return isNaN(n) ? trimmed : n;
+  }
+  // Dependency-aware getter
+  const gv = (r, c) => {
+    const k = `${r},${c}`;
+    if (visited.has(k)) return '#CIRCULAR!';
+    const nv = new Set(visited); nv.add(k);
+    return evaluate(getData(r, c), getData, nv);
+  };
+  try {
+    let expr = trimmed.slice(1);
+    expr = expandRangeRefs(expr, gv);
+    const tokens = tokenize(expr);
+    const [result] = parseExpr(tokens, 0, gv);
+    if (typeof result === 'boolean') return result ? 'TRUE' : 'FALSE';
+    return result ?? '';
+  } catch(e) {
+    return '#ERROR!';
+  }
+}
+
+// ════════════════════════════════════════════════════════════════════
+//  NUMBER FORMATTING
+// ════════════════════════════════════════════════════════════════════
+function fmtDisplay(val, fmt) {
+  if (val==='' || val==null) return '';
+  if (typeof val==='string' && val.startsWith('#')) return val;
+  const n = parseFloat(val);
+  const ok = !isNaN(n);
+  if (fmt==='$'  && ok) return '$' + n.toLocaleString('en-US', {minimumFractionDigits:2,maximumFractionDigits:2});
+  if (fmt==='%'  && ok) return (n*100).toFixed(2) + '%';
+  if (fmt===','  && ok) return n.toLocaleString('en-US');
+  if (fmt==='.2' && ok) return n.toFixed(2);
+  if (fmt==='0'  && ok) return Math.floor(n).toString();
+  return String(val);
+}
+
+// ════════════════════════════════════════════════════════════════════
+//  STATE
+// ════════════════════════════════════════════════════════════════════
+const state = {
+  data:  {},    // key "r,c" → raw string
+  style: {},    // key "r,c" → { bold, italic, underline, color, bg, align, fontFamily, fontSize }
+  fmt:   {},    // key "r,c" → format code string
+  colW:  Array.from({length: COLS}, (_,i) => i<2 ? 100 : DEFAULT_COL_W),
+  sel:   { r:0, c:0, r2:0, c2:0 },
+  editing: false,
+  editVal: '',
+};
+
+// ── Sample seed data ──────────────────────────────────────────
+(function seedData() {
+  const s = (r,c,v) => state.data[`${r},${c}`] = String(v);
+  const bold = (r,c) => { const k=`${r},${c}`; state.style[k]={...(state.style[k]||{}),bold:true}; };
+  const bg   = (r,c,col) => { const k=`${r},${c}`; state.style[k]={...(state.style[k]||{}),bg:col}; };
+  const ac   = (r,c,a)   => { const k=`${r},${c}`; state.style[k]={...(state.style[k]||{}),align:a}; };
+
+  ['Product','Region','Q1','Q2','Q3','Q4','Total','Avg','Growth %'].forEach((h,c) => {
+    s(0,c,h); bold(0,c); bg(0,c,'#1a73e8');
+    state.style[`0,${c}`].color='#fff'; ac(0,c,'center');
+  });
+
+  [['Widget A','North',12400,15800,14200,18900],
+   ['Widget B','South', 8900, 9200,11400,13200],
+   ['Widget C','East', 21000,19500,22800,25100],
+   ['Widget D','West',  6700, 7100, 8400, 9600],
+   ['Widget E','Central',15600,16200,17800,19400]
+  ].forEach((row,ri) => {
+    row.forEach((v,c) => s(ri+1,c,v));
+    const r=ri+1;
+    s(r,6,`=SUM(C${r+1}:F${r+1})`);
+    s(r,7,`=AVERAGE(C${r+1}:F${r+1})`);
+    s(r,8,`=ROUND((F${r+1}-C${r+1})/C${r+1}*100,1)`);
+    state.fmt[`${r},6`]=','; state.fmt[`${r},7`]=','; state.fmt[`${r},8`]='.2';
+  });
+
+  s(7,0,'TOTALS'); bold(7,0); bg(7,0,'#e8f0fe');
+  'CDEF'.split('').forEach((col,i) => {
+    s(7,2+i,`=SUM(${col}2:${col}6)`);
+    state.fmt[`7,${2+i}`]=','; bold(7,2+i); bg(7,2+i,'#e8f0fe');
+  });
+  s(7,6,'=SUM(G2:G6)');  state.fmt['7,6']=',';   bold(7,6); bg(7,6,'#e8f0fe');
+  s(7,7,'=AVERAGE(H2:H6)'); state.fmt['7,7']=','; bold(7,7); bg(7,7,'#e8f0fe');
+  s(7,8,'=AVERAGE(I2:I6)'); state.fmt['7,8']='.2'; bold(7,8); bg(7,8,'#e8f0fe');
+})();
+
+// ════════════════════════════════════════════════════════════════════
+//  DOM REFS & CELL ELEMENT CACHE
+// ════════════════════════════════════════════════════════════════════
+const $grid       = document.getElementById('grid');
+const $editor     = document.getElementById('cell-editor');
+const $fInput     = document.getElementById('formula-input');
+const $cellRefBox = document.getElementById('cell-ref-box');
+const $gridCont   = document.getElementById('grid-container');
+const $gridWrap   = document.getElementById('grid-wrapper');
+
+const cellEls = [];  // cellEls[r][c] = <td>
+
+// ════════════════════════════════════════════════════════════════════
+//  GRID BUILD (once)
+// ════════════════════════════════════════════════════════════════════
+function buildGrid() {
+  const frag = document.createDocumentFragment();
+
+  // thead
+  const thead = document.createElement('thead');
+  const trh   = document.createElement('tr');
+  const corner = document.createElement('th');
+  corner.className = 'corner'; corner.style.height = '22px';
+  trh.appendChild(corner);
+
+  for (let c = 0; c < COLS; c++) {
+    const th = document.createElement('th');
+    th.className = 'col-hdr';
+    th.dataset.col = c;
+    th.style.width = th.style.minWidth = state.colW[c] + 'px';
+    th.innerHTML = `<div style="position:relative;padding:0 6px">${numToCol(c)}<div class="col-resize" data-col="${c}"></div></div>`;
+    trh.appendChild(th);
+  }
+  thead.appendChild(trh);
+  frag.appendChild(thead);
+
+  // tbody
+  const tbody = document.createElement('tbody');
+  for (let r = 0; r < ROWS; r++) {
+    cellEls[r] = [];
+    const tr = document.createElement('tr');
+
+    const rh = document.createElement('td');
+    rh.className = 'row-hdr'; rh.dataset.row = r;
+    rh.textContent = r + 1;
+    tr.appendChild(rh);
+
+    for (let c = 0; c < COLS; c++) {
+      const td = document.createElement('td');
+      td.className = 'cell';
+      td.dataset.row = r; td.dataset.col = c;
+      td.style.width = td.style.minWidth = state.colW[c] + 'px';
+      cellEls[r][c] = td;
+      paintCell(r, c, td);
+      tr.appendChild(td);
+    }
+    tbody.appendChild(tr);
+  }
+  frag.appendChild(tbody);
+  $grid.textContent = '';
+  $grid.appendChild(frag);
+}
+
+// ════════════════════════════════════════════════════════════════════
+//  CELL PAINT
+// ════════════════════════════════════════════════════════════════════
+function getData(r,c)    { return state.data[`${r},${c}`] ?? ''; }
+function getComputed(r,c){ return evaluate(getData(r,c), getData); }
+function getStyle(r,c)   { return state.style[`${r},${c}`] ?? {}; }
+function getFmt(r,c)     { return state.fmt[`${r},${c}`] ?? ''; }
+
+function paintCell(r, c, el) {
+  if (!el) el = cellEls[r]?.[c];
+  if (!el) return;
+  const computed = getComputed(r, c);
+  const display  = fmtDisplay(computed, getFmt(r, c));
+  const st       = getStyle(r, c);
+  const isNum    = !isNaN(parseFloat(computed)) && computed !== '';
+  const isErr    = typeof computed==='string' && computed.startsWith('#') && computed.includes('!');
+  const align    = st.align ?? (isNum ? 'right' : 'left');
+
+  el.textContent         = display;
+  el.style.textAlign     = align;
+  el.style.fontWeight    = st.bold       ? 'bold'      : '';
+  el.style.fontStyle     = st.italic     ? 'italic'    : '';
+  el.style.textDecoration= st.underline  ? 'underline' : '';
+  el.style.color         = isErr ? '#cc0000' : (st.color || '');
+  el.style.backgroundColor = st.bg || '';
+  el.style.fontFamily    = st.fontFamily || '';
+  el.style.fontSize      = st.fontSize   ? st.fontSize+'px' : '';
+  el.classList.toggle('error-val', isErr);
+}
+
+function repaintAll() {
+  for (let r=0; r<ROWS; r++) for (let c=0; c<COLS; c++) paintCell(r,c);
+}
+
+// ════════════════════════════════════════════════════════════════════
+//  SELECTION
+// ════════════════════════════════════════════════════════════════════
+function clamp(v, lo, hi) { return Math.max(lo, Math.min(hi, v)); }
+
+function applySelection() {
+  // Clear old marks
+  $grid.querySelectorAll('.selected,.in-range').forEach(el => el.classList.remove('selected','in-range'));
+  $grid.querySelectorAll('.col-hdr.sel,.row-hdr.sel').forEach(el => el.classList.remove('sel'));
+
+  const {r,c,r2,c2} = state.sel;
+  const minR=Math.min(r,r2), maxR=Math.max(r,r2);
+  const minC=Math.min(c,c2), maxC=Math.max(c,c2);
+
+  for (let rr=minR; rr<=maxR; rr++) {
+    for (let cc=minC; cc<=maxC; cc++) {
+      const el = cellEls[rr]?.[cc];
+      if (el) el.classList.add(rr===r&&cc===c ? 'selected' : 'in-range');
+    }
+  }
+  // Header highlights
+  for (let cc=minC; cc<=maxC; cc++) {
+    const h=$grid.querySelector(`th[data-col="${cc}"]`); if(h) h.classList.add('sel');
+  }
+  for (let rr=minR; rr<=maxR; rr++) {
+    const h=$grid.querySelector(`td[data-row="${rr}"].row-hdr`); if(h) h.classList.add('sel');
+  }
+
+  // Formula bar
+  $cellRefBox.textContent = cellLabel(r,c);
+  if (!state.editing) $fInput.value = getData(r,c);
+
+  // Toolbar state
+  const st = getStyle(r,c);
+  document.getElementById('tb-bold').classList.toggle('active',!!st.bold);
+  document.getElementById('tb-italic').classList.toggle('active',!!st.italic);
+  document.getElementById('tb-underline').classList.toggle('active',!!st.underline);
+  document.getElementById('tb-al').classList.toggle('active', st.align==='left');
+  document.getElementById('tb-ac').classList.toggle('active', st.align==='center');
+  document.getElementById('tb-ar').classList.toggle('active', st.align==='right');
+  document.getElementById('tb-fcolor').value  = st.color  || '#1f1f1f';
+  document.getElementById('tb-bgcolor').value = st.bg     || '#ffffff';
+  document.getElementById('tb-font-family').value = st.fontFamily || 'Calibri';
+  document.getElementById('tb-font-size').value   = st.fontSize   || 13;
+  const fmtMap={'$':'fmt-dollar','%':'fmt-percent',',':'fmt-comma','.2':'fmt-dec2','0':'fmt-int'};
+  Object.values(fmtMap).forEach(id=>document.getElementById(id)?.classList.remove('active'));
+  if (fmtMap[getFmt(r,c)]) document.getElementById(fmtMap[getFmt(r,c)])?.classList.add('active');
+
+  updateStatusBar();
+  cellEls[r]?.[c]?.scrollIntoView({block:'nearest',inline:'nearest'});
+}
+
+function moveSel(r, c, extend) {
+  r = clamp(r, 0, ROWS-1); c = clamp(c, 0, COLS-1);
+  if (extend) { state.sel.r2=r; state.sel.c2=c; }
+  else state.sel = {r,c,r2:r,c2:c};
+  applySelection();
+}
+
+// ════════════════════════════════════════════════════════════════════
+//  EDITING
+// ════════════════════════════════════════════════════════════════════
+function startEditing(initVal) {
+  const {r,c} = state.sel;
+  const raw = initVal !== undefined ? initVal : getData(r,c);
+  state.editing = true; state.editVal = raw;
+  $fInput.value = raw;
+
+  const cellEl = cellEls[r][c];
+  const cellRect = cellEl.getBoundingClientRect();
+  const wrapRect = $gridWrap.getBoundingClientRect();
+  $editor.style.left   = (cellRect.left - wrapRect.left + $gridCont.scrollLeft) + 'px';
+  $editor.style.top    = (cellRect.top  - wrapRect.top  + $gridCont.scrollTop)  + 'px';
+  $editor.style.width  = Math.max(cellRect.width, 130) + 'px';
+  $editor.style.height = cellRect.height + 'px';
+  const st = getStyle(r,c);
+  $editor.style.fontFamily = st.fontFamily || "'Calibri','Segoe UI',sans-serif";
+  $editor.style.fontSize   = (st.fontSize || 13) + 'px';
+  $editor.style.textAlign  = st.align || ((!isNaN(parseFloat(raw))&&raw!=='') ? 'right' : 'left');
+  $editor.style.display = 'block';
+  $editor.value = raw;
+  $editor.focus(); $editor.select();
+}
+
+function stopEditing(commit) {
+  if (!state.editing) return;
+  if (commit) {
+    const {r,c} = state.sel;
+    state.data[`${r},${c}`] = state.editVal;
+    repaintAll();  // formulas in other cells may depend on this
+  }
+  state.editing = false; state.editVal = '';
+  $editor.style.display = 'none'; $editor.value = '';
+}
+
+// ════════════════════════════════════════════════════════════════════
+//  STATUS BAR
+// ════════════════════════════════════════════════════════════════════
+function updateStatusBar() {
+  const {r,c,r2,c2} = state.sel;
+  const minR=Math.min(r,r2),maxR=Math.max(r,r2),minC=Math.min(c,c2),maxC=Math.max(c,c2);
+  document.getElementById('st-ref').textContent =
+    (maxR>minR||maxC>minC) ? `${maxR-minR+1}R × ${maxC-minC+1}C` : cellLabel(r,c);
+
+  const nums = [];
+  for (let rr=minR;rr<=maxR;rr++)
+    for (let cc=minC;cc<=maxC;cc++) {
+      const v=getComputed(rr,cc), n=parseFloat(v);
+      if (!isNaN(n)&&v!=='') nums.push(n);
+    }
+  const show = nums.length>0;
+  ['sum','avg','cnt','min','max'].forEach(id => {
+    document.getElementById(`st-${id}-w`).style.display = show?'':'none';
+  });
+  if (show) {
+    const sum=nums.reduce((a,b)=>a+b,0);
+    const fmt=v=>v.toLocaleString('en-US',{maximumFractionDigits:4});
+    document.getElementById('st-sum').textContent = fmt(sum);
+    document.getElementById('st-avg').textContent = fmt(sum/nums.length);
+    document.getElementById('st-cnt').textContent = nums.length;
+    document.getElementById('st-min').textContent = fmt(Math.min(...nums));
+    document.getElementById('st-max').textContent = fmt(Math.max(...nums));
+  }
+}
+
+// ════════════════════════════════════════════════════════════════════
+//  STYLE / FORMAT HELPERS
+// ════════════════════════════════════════════════════════════════════
+function applyStyle(prop, value) {
+  const {r,c,r2,c2}=state.sel;
+  const minR=Math.min(r,r2),maxR=Math.max(r,r2),minC=Math.min(c,c2),maxC=Math.max(c,c2);
+  for (let rr=minR;rr<=maxR;rr++) for (let cc=minC;cc<=maxC;cc++) {
+    const k=`${rr},${cc}`;
+    state.style[k]={...(state.style[k]||{}),[prop]:value};
+    paintCell(rr,cc);
+  }
+  applySelection();
+}
+function applyFmt(fmt) {
+  const {r,c,r2,c2}=state.sel;
+  const minR=Math.min(r,r2),maxR=Math.max(r,r2),minC=Math.min(c,c2),maxC=Math.max(c,c2);
+  for (let rr=minR;rr<=maxR;rr++) for (let cc=minC;cc<=maxC;cc++) {
+    state.fmt[`${rr},${cc}`]=fmt; paintCell(rr,cc);
+  }
+  applySelection();
+}
+function clearSelection() {
+  const {r,c,r2,c2}=state.sel;
+  const minR=Math.min(r,r2),maxR=Math.max(r,r2),minC=Math.min(c,c2),maxC=Math.max(c,c2);
+  for (let rr=minR;rr<=maxR;rr++) for (let cc=minC;cc<=maxC;cc++) {
+    state.data[`${rr},${cc}`]=''; paintCell(rr,cc);
+  }
+  repaintAll(); $fInput.value=''; updateStatusBar();
+}
+
+// ════════════════════════════════════════════════════════════════════
+//  KEYBOARD HANDLER
+// ════════════════════════════════════════════════════════════════════
+document.addEventListener('keydown', e => {
+  const {r,c} = state.sel;
+  if (e.target === $fInput || e.target === $editor) return; // handled separately
+
+  if (state.editing) {
+    if (e.key==='Escape')                    { stopEditing(false); e.preventDefault(); }
+    else if (e.key==='Enter'&&!e.shiftKey)   { stopEditing(true);  moveSel(r+1,c); e.preventDefault(); }
+    else if (e.key==='Tab')                  { stopEditing(true);  moveSel(r, e.shiftKey?c-1:c+1); e.preventDefault(); }
+    return;
+  }
+
+  if (e.key==='F2')                          { startEditing(); e.preventDefault(); return; }
+  if (e.key==='Delete'||e.key==='Backspace') { clearSelection(); e.preventDefault(); return; }
+  if (e.key==='Enter')                       { moveSel(r+1,c); e.preventDefault(); return; }
+  if (e.key==='Tab')                         { moveSel(r, e.shiftKey?c-1:c+1); e.preventDefault(); return; }
+  if (e.key==='ArrowUp')                     { moveSel(r-1,c,e.shiftKey); e.preventDefault(); return; }
+  if (e.key==='ArrowDown')                   { moveSel(r+1,c,e.shiftKey); e.preventDefault(); return; }
+  if (e.key==='ArrowLeft')                   { moveSel(r,c-1,e.shiftKey); e.preventDefault(); return; }
+  if (e.key==='ArrowRight')                  { moveSel(r,c+1,e.shiftKey); e.preventDefault(); return; }
+  if (e.key==='Home')                        { moveSel(r,0); e.preventDefault(); return; }
+  if (e.key==='End')                         { moveSel(r,COLS-1); e.preventDefault(); return; }
+  if ((e.ctrlKey||e.metaKey) && e.key==='b') { applyStyle('bold',   !getStyle(r,c).bold);      e.preventDefault(); return; }
+  if ((e.ctrlKey||e.metaKey) && e.key==='i') { applyStyle('italic', !getStyle(r,c).italic);    e.preventDefault(); return; }
+  if ((e.ctrlKey||e.metaKey) && e.key==='u') { applyStyle('underline',!getStyle(r,c).underline);e.preventDefault(); return; }
+  if ((e.ctrlKey||e.metaKey)) return;
+
+  // Printable → start editing
+  if (e.key.length===1) { startEditing(e.key); e.preventDefault(); }
+});
+
+// ════════════════════════════════════════════════════════════════════
+//  GRID MOUSE EVENTS
+// ════════════════════════════════════════════════════════════════════
+$grid.addEventListener('mousedown', e => {
+  const resizer = e.target.closest('.col-resize');
+  if (resizer) {
+    const ci=parseInt(resizer.dataset.col), startX=e.clientX, startW=state.colW[ci];
+    const onMove = me => {
+      const w=Math.max(28, startW+me.clientX-startX);
+      state.colW[ci]=w;
+      $grid.querySelectorAll(`[data-col="${ci}"]`).forEach(el=>{
+        el.style.width=el.style.minWidth=w+'px';
+      });
+    };
+    const onUp = () => { window.removeEventListener('mousemove',onMove); window.removeEventListener('mouseup',onUp); };
+    window.addEventListener('mousemove',onMove); window.addEventListener('mouseup',onUp);
+    e.preventDefault(); return;
+  }
+
+  if (state.editing) stopEditing(true);
+
+  const td=e.target.closest('.cell');
+  const rh=e.target.closest('.row-hdr');
+  const ch=e.target.closest('.col-hdr');
+  if (td) { moveSel(+td.dataset.row,+td.dataset.col,e.shiftKey); e.preventDefault(); }
+  if (rh) { state.sel={r:+rh.dataset.row,c:0,r2:+rh.dataset.row,c2:COLS-1}; applySelection(); }
+  if (ch) { state.sel={r:0,c:+ch.dataset.col,r2:ROWS-1,c2:+ch.dataset.col}; applySelection(); }
+});
+$grid.addEventListener('mouseover', e => {
+  if (e.buttons!==1) return;
+  const td=e.target.closest('.cell');
+  if (td) moveSel(+td.dataset.row,+td.dataset.col,true);
+});
+$grid.addEventListener('dblclick', e => {
+  if (e.target.closest('.cell')) startEditing();
+});
+
+// ── Cell editor events ──────────────────────────────────────
+$editor.addEventListener('input',  () => { state.editVal=$editor.value; $fInput.value=$editor.value; });
+$editor.addEventListener('keydown', e => {
+  const {r,c}=state.sel;
+  if (e.key==='Escape')                  { stopEditing(false); e.preventDefault(); }
+  else if (e.key==='Enter'&&!e.shiftKey) { stopEditing(true);  moveSel(r+1,c);            e.preventDefault(); }
+  else if (e.key==='Tab')                { stopEditing(true);  moveSel(r,e.shiftKey?c-1:c+1); e.preventDefault(); }
+});
+$editor.addEventListener('blur', e => {
+  if (e.relatedTarget!==$fInput) stopEditing(true);
+});
+
+// ── Formula bar events ───────────────────────────────────────
+$fInput.addEventListener('focus', () => {
+  if (!state.editing) startEditing(getData(state.sel.r,state.sel.c));
+});
+$fInput.addEventListener('input', e => {
+  state.editVal=e.target.value;
+  if (state.editing) $editor.value=e.target.value;
+});
+$fInput.addEventListener('keydown', e => {
+  const {r,c}=state.sel;
+  if (e.key==='Enter') {
+    stopEditing(true); moveSel(r+1,c);
+    $gridCont.focus(); e.preventDefault();
+  }
+  if (e.key==='Escape') {
+    $fInput.value=getData(r,c); stopEditing(false); e.preventDefault();
+  }
+});
+
+// ════════════════════════════════════════════════════════════════════
+//  TOOLBAR EVENTS
+// ════════════════════════════════════════════════════════════════════
+document.getElementById('tb-bold').addEventListener('click',      ()=>applyStyle('bold',      !getStyle(state.sel.r,state.sel.c).bold));
+document.getElementById('tb-italic').addEventListener('click',    ()=>applyStyle('italic',    !getStyle(state.sel.r,state.sel.c).italic));
+document.getElementById('tb-underline').addEventListener('click', ()=>applyStyle('underline', !getStyle(state.sel.r,state.sel.c).underline));
+document.getElementById('tb-al').addEventListener('click', ()=>applyStyle('align','left'));
+document.getElementById('tb-ac').addEventListener('click', ()=>applyStyle('align','center'));
+document.getElementById('tb-ar').addEventListener('click', ()=>applyStyle('align','right'));
+document.getElementById('tb-fcolor').addEventListener('input',  e=>applyStyle('color', e.target.value));
+document.getElementById('tb-bgcolor').addEventListener('input', e=>applyStyle('bg',    e.target.value));
+document.getElementById('tb-font-family').addEventListener('change',e=>applyStyle('fontFamily',e.target.value));
+document.getElementById('tb-font-size').addEventListener('change',  e=>applyStyle('fontSize',parseInt(e.target.value)));
+document.getElementById('fmt-dollar').addEventListener('click',  ()=>applyFmt('$'));
+document.getElementById('fmt-percent').addEventListener('click', ()=>applyFmt('%'));
+document.getElementById('fmt-comma').addEventListener('click',   ()=>applyFmt(','));
+document.getElementById('fmt-dec2').addEventListener('click',    ()=>applyFmt('.2'));
+document.getElementById('fmt-int').addEventListener('click',     ()=>applyFmt('0'));
+document.getElementById('tb-clear').addEventListener('click', ()=>{
+  if (confirm('Clear ALL data from every cell?')) {
+    state.data={}; state.style={}; state.fmt={};
+    repaintAll(); $fInput.value=''; updateStatusBar();
+  }
+});
+
+// ── Formula helper panel ─────────────────────────────────────
+const fnPanel = document.getElementById('fn-helper');
+[['=SUM(A1:A10)','Sum'],['=AVERAGE(A1:A10)','Average'],['=IF(A1>0,"Yes","No")','IF'],
+ ['=MAX(A1:A10)','Max'],['=MIN(A1:A10)','Min'],['=COUNT(A1:A10)','Count'],
+ ['=ROUND(A1,2)','Round'],['=CONCATENATE(A1," ",B1)','Join'],
+ ['=TODAY()','Today'],['=LEN(A1)','Length'],['=UPPER(A1)','Uppercase'],
+ ['=SQRT(A1)','Sqrt'],['=POWER(A1,2)','Power'],['=IFERROR(A1/B1,0)','Safe Div'],
+ ['=LEFT(A1,3)','Left'],['=RIGHT(A1,3)','Right'],['=MID(A1,2,3)','Mid'],
+ ['=TRIM(A1)','Trim'],['=PROPER(A1)','Proper Case'],['=NOW()','Now'],
+].forEach(([formula,label])=>{
+  const btn=document.createElement('button');
+  btn.className='fn-chip'; btn.textContent=label; btn.title=formula;
+  btn.addEventListener('click', ()=>startEditing(formula));
+  fnPanel.appendChild(btn);
+});
+document.getElementById('tb-fn-help').addEventListener('click', ()=>{
+  const vis=fnPanel.classList.toggle('visible');
+  document.getElementById('tb-fn-help').classList.toggle('active',vis);
+});
+
+// ════════════════════════════════════════════════════════════════════
+//  TABLEAU INTEGRATION
+// ════════════════════════════════════════════════════════════════════
+let tableauReady = false, tableauWorksheets = [];
+
+async function initTableau() {
+  if (typeof tableau !== 'undefined' && tableau.extensions) {
+    try {
+      await tableau.extensions.initializeAsync();
+      tableauReady = true;
+      tableauWorksheets = tableau.extensions.dashboardContent.dashboard.worksheets;
+      console.log('[Spreadsheet] ✅ Tableau initialised —', tableauWorksheets.length, 'worksheets');
+    } catch(err) {
+      console.log('[Spreadsheet] Standalone mode:', err.message);
+    }
+  }
+}
+
+document.getElementById('tb-import').addEventListener('click', ()=>{
+  if (!tableauReady) {
+    alert('Not running inside Tableau.\nOpen this file as a Dashboard Extension in Tableau Desktop or Server.\nSee SETUP.md for instructions.');
+    return;
+  }
+  const ws = document.getElementById('ws-select');
+  ws.innerHTML = '';
+  tableauWorksheets.forEach((s,i)=>{
+    const o=document.createElement('option'); o.value=i; o.textContent=s.name; ws.appendChild(o);
+  });
+  document.getElementById('import-panel').classList.add('visible');
+});
+document.getElementById('btn-cancel-import').addEventListener('click', ()=>{
+  document.getElementById('import-panel').classList.remove('visible');
+});
+document.getElementById('btn-do-import').addEventListener('click', async ()=>{
+  const idx = parseInt(document.getElementById('ws-select').value);
+  const msg = document.getElementById('import-msg');
+  try {
+    msg.textContent = 'Importing…';
+    const ws   = tableauWorksheets[idx];
+    const data = await ws.getSummaryDataAsync();
+    // Headers → row 0
+    data.columns.forEach((col,c)=>{
+      const k=`0,${c}`;
+      state.data[k]=col.fieldName;
+      state.style[k]={bold:true,bg:'#1a73e8',color:'#fff',align:'center'};
+    });
+    // Rows
+    data.data.forEach((row,r)=>{
+      row.forEach((cell,c)=>{
+        state.data[`${r+1},${c}`]=String(cell.formattedValue??cell.value??'');
+      });
+    });
+    repaintAll(); updateStatusBar();
+    msg.textContent=`✅ Imported ${data.data.length} rows × ${data.columns.length} cols from "${ws.name}"`;
+    setTimeout(()=>document.getElementById('import-panel').classList.remove('visible'), 2200);
+  } catch(err) {
+    msg.textContent = '❌ ' + err.message;
+  }
+});
+
+// ════════════════════════════════════════════════════════════════════
+//  BOOT
+// ════════════════════════════════════════════════════════════════════
+buildGrid();
+applySelection();
+initTableau();
+</script>
+</body>
+</html>
