@@ -712,7 +712,7 @@ const state = {
 
   ['Product','Region','Q1','Q2','Q3','Q4','Total','Avg','Growth %'].forEach((h,c) => {
     s(0,c,h); bold(0,c); bg(0,c,'#1a73e8');
-    state.style[`0,${c}`].color='#fff'; ac(0,c,'center');
+    state.style[`0,${c}`].color='#ffffff'; ac(0,c,'center');
   });
 
   [['Widget A','North',12400,15800,14200,18900],
@@ -841,6 +841,14 @@ function repaintAll() {
 // ════════════════════════════════════════════════════════════════════
 function clamp(v, lo, hi) { return Math.max(lo, Math.min(hi, v)); }
 
+
+// Normalize 3-digit hex to 6-digit for color inputs
+function normalizeHex(c) {
+  if (!c) return '#000000';
+  const m = c.match(/^#([0-9a-fA-F]{3})$/);
+  return m ? '#'+m[1][0]+m[1][0]+m[1][1]+m[1][1]+m[1][2]+m[1][2] : c;
+}
+
 function applySelection() {
   // Clear old marks
   $grid.querySelectorAll('.selected,.in-range').forEach(el => el.classList.remove('selected','in-range'));
@@ -876,8 +884,8 @@ function applySelection() {
   document.getElementById('tb-al').classList.toggle('active', st.align==='left');
   document.getElementById('tb-ac').classList.toggle('active', st.align==='center');
   document.getElementById('tb-ar').classList.toggle('active', st.align==='right');
-  document.getElementById('tb-fcolor').value  = st.color  || '#1f1f1f';
-  document.getElementById('tb-bgcolor').value = st.bg     || '#ffffff';
+  document.getElementById('tb-fcolor').value  = normalizeHex(st.color  || '#1f1f1f');
+  document.getElementById('tb-bgcolor').value = normalizeHex(st.bg     || '#ffffff');
   document.getElementById('tb-font-family').value = st.fontFamily || 'Calibri';
   document.getElementById('tb-font-size').value   = st.fontSize   || 13;
   const fmtMap={'$':'fmt-dollar','%':'fmt-percent',',':'fmt-comma','.2':'fmt-dec2','0':'fmt-int'};
@@ -1181,7 +1189,7 @@ document.getElementById('btn-do-import').addEventListener('click', async ()=>{
     data.columns.forEach((col,c)=>{
       const k=`0,${c}`;
       state.data[k]=col.fieldName;
-      state.style[k]={bold:true,bg:'#1a73e8',color:'#fff',align:'center'};
+      state.style[k]={bold:true,bg:'#1a73e8',color:'#ffffff',align:'center'};
     });
     // Rows
     data.data.forEach((row,r)=>{
